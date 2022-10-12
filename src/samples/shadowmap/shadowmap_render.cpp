@@ -155,11 +155,6 @@ void SimpleShadowmapRender::loadShaders()
   etna::create_program("simple_shadow", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
 }
 
-void SimpleShadowmapRender::createDescriptorSets()
-{
-
-}
-
 void SimpleShadowmapRender::SetupSimplePipeline()
 {
   std::vector<std::pair<VkDescriptorType, uint32_t> > dtypes = {
@@ -255,7 +250,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         // Transfer the shadowmap to depth write layout
         VkImageMemoryBarrier2
         {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
           .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
@@ -267,7 +262,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
           .image = m_pShadowMap2->m_attachments[0].image,
           .subresourceRange =
             {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+              .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
               .baseMipLevel = 0,
               .levelCount = 1,
               .baseArrayLayer = 0,
@@ -277,6 +272,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       };
     VkDependencyInfo depInfo
       {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
         .imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
         .pImageMemoryBarriers = barriers.data(),
@@ -304,8 +300,8 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         .extent = ext
       };
 
-    VkViewport vp = viewport;
-    VkRect2D scis = scissor;
+    VkViewport vp = (VkViewport)viewport;
+    VkRect2D scis = (VkRect2D)scissor;
     vkCmdSetViewport(a_cmdBuff, 0, 1, &vp);
     vkCmdSetScissor(a_cmdBuff, 0, 1, &scis);
 
@@ -321,7 +317,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       .layerCount = 1,
       .pDepthAttachment = &shadowMapAttInfo
     };
-    VkRenderingInfo rInf = renderInfo;
+    VkRenderingInfo rInf = (VkRenderingInfo)renderInfo;
     vkCmdBeginRendering(a_cmdBuff, &rInf);
 
     {
@@ -337,7 +333,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         // Transfer the shadowmap from depth write to shader read 
         VkImageMemoryBarrier2
         {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           .srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
           .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
           .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -349,7 +345,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
           .image = m_pShadowMap2->m_attachments[0].image,
           .subresourceRange =
             {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+              .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
               .baseMipLevel = 0,
               .levelCount = 1,
               .baseArrayLayer = 0,
@@ -359,7 +355,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         // Wait for the semaphore to signal that the swapchain image is available
         VkImageMemoryBarrier2
         {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           // Our semo signals this stage
           .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
           .srcAccessMask = 0,
@@ -382,6 +378,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       };
     VkDependencyInfo depInfo
       {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
         .imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
         .pImageMemoryBarriers = barriers.data(),
@@ -408,8 +405,8 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         .extent = ext
       };
 
-    VkViewport vp = viewport;
-    VkRect2D scis = scissor;
+    VkViewport vp = (VkViewport)viewport;
+    VkRect2D scis = (VkRect2D)scissor;
     vkCmdSetViewport(a_cmdBuff, 0, 1, &vp);
     vkCmdSetScissor(a_cmdBuff, 0, 1, &scis);
 
@@ -445,7 +442,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       .pColorAttachments = &swapchainImageAttInfo,
       .pDepthAttachment = &depthBufferAttInfo
     };
-    VkRenderingInfo rInf = renderInfo;
+    VkRenderingInfo rInf = (VkRenderingInfo)renderInfo;
     vkCmdBeginRendering(a_cmdBuff, &rInf);
 
     vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicForwardPipeline.getVkPipeline());
@@ -470,7 +467,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
         // Transfer swapchain to present layout
         VkImageMemoryBarrier2
         {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
           .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
           .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -492,6 +489,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       };
     VkDependencyInfo depInfo
       {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
         .imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
         .pImageMemoryBarriers = barriers.data(),
