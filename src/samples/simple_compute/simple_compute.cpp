@@ -95,12 +95,14 @@ void SimpleCompute::SetupSimplePipeline()
 
   // Заполнение буферов
   std::vector<float> values(m_length);
-  std::srand(0);
-  for (uint32_t i = 0; i < m_length; ++i) {
-
-    values[i] = std::rand() % 500;
+  m_A_C.resize(m_length);
+  std::srand(2);
+  for (uint32_t i = 0; i < m_length; ++i) 
+  {
+    float num = std::rand() % 500;
+    values[i] = num;
+    m_A_C[i] = num;
   }
-  m_A_C = values;
   m_pCopyHelper->UpdateBuffer(m_A_shader, 0, values.data(), sizeof(float) * values.size());
 }
 

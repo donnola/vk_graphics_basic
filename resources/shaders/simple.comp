@@ -21,11 +21,15 @@ void main()
     uint idx = gl_GlobalInvocationID.x;
     if (idx < PushConstant.len) {
         float sum = 0;
-        for (int i = -3; i<= 3; ++i)
+        for (uint i = 0; i < 7; ++i)
         {
-            if (idx + i >= 0 && idx + i < PushConstant.len)
+            if (i < 3 && idx >= 3 - i)
             {
-                sum += A[idx + i];
+                sum += A[idx + i - 3];
+            }
+            if (i >= 3 && idx + i - 3 < PushConstant.len)
+            {
+                sum += A[idx + i - 3];
             }
         }
         B[idx] = A[idx] - sum / 7;
