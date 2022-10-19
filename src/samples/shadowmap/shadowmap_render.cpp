@@ -7,6 +7,7 @@
 
 #include <etna/GlobalContext.hpp>
 #include <etna/Etna.hpp>
+#include <etna/RenderTargetStates.hpp>
 #include <vulkan/vulkan_core.h>
 
 
@@ -14,14 +15,14 @@
 
 void SimpleShadowmapRender::AllocateResources()
 {
-  mainViewDepth = etna::get_context().createImage(etna::Image::CreateInfo
+  mainViewDepth = m_context->createImage(etna::Image::CreateInfo
   {
     .extent = vk::Extent3D{m_width, m_height, 1},
     .format = vk::Format::eD32Sfloat,
     .imageUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment
   });
 
-  shadowMap = etna::get_context().createImage(etna::Image::CreateInfo
+  shadowMap = m_context->createImage(etna::Image::CreateInfo
   {
     .extent = vk::Extent3D{2048, 2048, 1},
     .format = vk::Format::eD16Unorm,
@@ -29,27 +30,14 @@ void SimpleShadowmapRender::AllocateResources()
   });
 
   defaultSampler = etna::Sampler(etna::Sampler::CreateInfo{});
+  constants = m_context->createBuffer(etna::Buffer::CreateInfo
+  {
+    .size = sizeof(UniformParams),
+    .bufferUsage = vk::BufferUsageFlagBits::eUniformBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY
+  });
 
-  CreateUniformBuffer();
-}
-
-void SimpleShadowmapRender::CreateUniformBuffer()
-{
-  VkMemoryRequirements memReq;
-  m_ubo = vk_utils::createBuffer(m_context->getDevice(), sizeof(UniformParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &memReq);
-
-  VkMemoryAllocateInfo allocateInfo = {};
-  allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  allocateInfo.pNext = nullptr;
-  allocateInfo.allocationSize = memReq.size;
-  allocateInfo.memoryTypeIndex = vk_utils::findMemoryType(memReq.memoryTypeBits,
-                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                                          m_context->getPhysicalDevice());
-  VK_CHECK_RESULT(vkAllocateMemory(m_context->getDevice(), &allocateInfo, nullptr, &m_uboAlloc));
-  VK_CHECK_RESULT(vkBindBufferMemory(m_context->getDevice(), m_ubo, m_uboAlloc, 0));
-
-  vkMapMemory(m_context->getDevice(), m_uboAlloc, 0, sizeof(m_uniforms), 0, &m_uboMappedMem);
+  m_uboMappedMem = constants.map();
 }
 
 void SimpleShadowmapRender::LoadScene(const char* path, bool transpose_inst_matrices)
@@ -73,9 +61,7 @@ void SimpleShadowmapRender::DeallocateResources()
   mainViewDepth.reset(); // TODO: Make an etna method to reset all the resources
   shadowMap.reset();
 
-  vkUnmapMemory(m_context->getDevice(), m_uboAlloc);
-  vkFreeMemory(m_context->getDevice(), m_uboAlloc, nullptr);
-  vkDestroyBuffer(m_context->getDevice(), m_ubo, nullptr);
+  constants = etna::Buffer();
 }
 
 
@@ -260,47 +246,11 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   //// draw scene to shadowmap
   //
   {
-    vk::Extent2D ext{2048, 2048};
-    vk::Viewport viewport
-      {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width  = static_cast<float>(ext.width),
-        .height = static_cast<float>(ext.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-      };
-    vk::Rect2D scissor
-      {
-        .offset = {0, 0},
-        .extent = ext
-      };
-
-    VkViewport vp = (VkViewport)viewport;
-    VkRect2D scis = (VkRect2D)scissor;
-    vkCmdSetViewport(a_cmdBuff, 0, 1, &vp);
-    vkCmdSetScissor(a_cmdBuff, 0, 1, &scis);
-
-    vk::RenderingAttachmentInfo shadowMapAttInfo {
-      .imageView = shadowMap.getView({}),
-      .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-      .loadOp = vk::AttachmentLoadOp::eClear,
-      .storeOp = vk::AttachmentStoreOp::eStore,
-      .clearValue = vk::ClearDepthStencilValue{1.0f, 0}
-    };
-    vk::RenderingInfo renderInfo {
-      .renderArea = scissor,
-      .layerCount = 1,
-      .pDepthAttachment = &shadowMapAttInfo
-    };
-    VkRenderingInfo rInf = (VkRenderingInfo)renderInfo;
-    vkCmdBeginRendering(a_cmdBuff, &rInf);
-
+    etna::RenderTargetState renderTargets(a_cmdBuff, {2048, 2048}, {}, shadowMap.getView({}));
     {
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline.getVkPipeline());
       DrawSceneCmd(a_cmdBuff, m_lightMatrix);
     }
-    vkCmdEndRendering(a_cmdBuff);
   }
 
   {
@@ -365,68 +315,22 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   //// draw final scene to screen
   //
   {
-    vk::Extent2D ext{m_width, m_height};
-    vk::Viewport viewport
-      {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width  = static_cast<float>(ext.width),
-        .height = static_cast<float>(ext.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-      };
-    vk::Rect2D scissor
-      {
-        .offset = {0, 0},
-        .extent = ext
-      };
-
-    VkViewport vp = (VkViewport)viewport;
-    VkRect2D scis = (VkRect2D)scissor;
-    vkCmdSetViewport(a_cmdBuff, 0, 1, &vp);
-    vkCmdSetScissor(a_cmdBuff, 0, 1, &scis);
-
     auto simpleMaterialInfo = etna::get_shader_program("simple_material");
 
     auto set = etna::create_descriptor_set(simpleMaterialInfo.getDescriptorLayoutId(0), {
-      etna::Binding {0, vk::DescriptorBufferInfo {m_ubo, 0, VK_WHOLE_SIZE}},
+      etna::Binding {0, vk::DescriptorBufferInfo {constants.get(), 0, VK_WHOLE_SIZE}},
       etna::Binding {1, vk::DescriptorImageInfo {defaultSampler.get(), shadowMap.getView({}), vk::ImageLayout::eShaderReadOnlyOptimal}}
     });
 
     VkDescriptorSet vkSet = set.getVkSet();
 
-    vk::RenderingAttachmentInfo depthBufferAttInfo = {
-      .imageView = mainViewDepth.getView({}),
-      .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-      .loadOp = vk::AttachmentLoadOp::eClear,
-      .storeOp = vk::AttachmentStoreOp::eStore,
-      .clearValue = vk::ClearDepthStencilValue{1.0f, 0}
-    };
-    vk::RenderingAttachmentInfo swapchainImageAttInfo = {
-      .imageView = a_targetImageView,
-      .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-      .loadOp = vk::AttachmentLoadOp::eClear,
-      .storeOp = vk::AttachmentStoreOp::eStore,
-      .clearValue = vk::ClearColorValue{std::array<float, 4>({0.0f, 0.0f, 0.0f, 1.0f})}
-    };
-
-    vk::RenderingInfo renderInfo {
-      .renderArea = scissor,
-      .layerCount = 1,
-      .colorAttachmentCount = 1,
-      .pColorAttachments = &swapchainImageAttInfo,
-      .pDepthAttachment = &depthBufferAttInfo
-    };
-    VkRenderingInfo rInf = (VkRenderingInfo)renderInfo;
-    vkCmdBeginRendering(a_cmdBuff, &rInf);
+    etna::RenderTargetState renderTargets(a_cmdBuff, {m_width, m_height}, {{a_targetImageView}}, mainViewDepth.getView({}));
 
     vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicForwardPipeline.getVkPipeline());
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
       m_basicForwardPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
     DrawSceneCmd(a_cmdBuff, m_worldViewProj);
-
-    vkCmdEndRendering(a_cmdBuff);
   }
 
   if(m_input.drawFSQuad)
