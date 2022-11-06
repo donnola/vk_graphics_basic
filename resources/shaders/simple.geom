@@ -13,6 +13,14 @@ layout(push_constant) uniform params_t
     mat4 mModel;
 } params;
 
+layout (location = 0 ) out VS_OUT
+{
+    vec3 wPos;
+    vec3 wNorm;
+    vec3 wTangent;
+    vec2 texCoord;
+} vOut;
+
 layout (location = 0) in VS_IN {
     vec3 wPos;
     vec3 wNorm;
@@ -20,23 +28,28 @@ layout (location = 0) in VS_IN {
     vec2 texCoord;
 } vIn[];
 
+layout(binding = 0, set = 0) uniform AppData
+{
+  UniformParams Params;
+};
+
 void main(void) 
 {
     gl_Position = params.mProjView * vec4(vIn[0].wPos, 1.0f);
     EmitVertex();
-    gl_Position = params.mProjView * vec4(vIn[0].wPos + vIn[0].wNorm * 0.01, 1.0);
+    gl_Position = params.mProjView * vec4(vIn[0].wPos + vIn[0].wNorm * 0.01 * (sin(Params.time) + 1), 1.0);
     EmitVertex();
     gl_Position = params.mProjView * vec4(vIn[1].wPos, 1.0f);
     EmitVertex();
-    gl_Position = params.mProjView * vec4(vIn[1].wPos + vIn[1].wNorm * 0.01, 1.0);
+    gl_Position = params.mProjView * vec4(vIn[1].wPos + vIn[1].wNorm * 0.01 * (sin(Params.time) + 1), 1.0);
     EmitVertex();
     gl_Position = params.mProjView * vec4(vIn[2].wPos, 1.0f);
     EmitVertex();
-    gl_Position = params.mProjView * vec4(vIn[2].wPos + vIn[2].wNorm * 0.01, 1.0);
+    gl_Position = params.mProjView * vec4(vIn[2].wPos + vIn[2].wNorm * 0.01 * (sin(Params.time) + 1), 1.0);
     EmitVertex();
     gl_Position = params.mProjView * vec4(vIn[0].wPos, 1.0f);
     EmitVertex();
-    gl_Position = params.mProjView * vec4(vIn[0].wPos + vIn[0].wNorm * 0.01, 1.0);
+    gl_Position = params.mProjView * vec4(vIn[0].wPos + vIn[0].wNorm * 0.01 * (sin(Params.time) + 1), 1.0);
     EmitVertex();
 
     EndPrimitive();
