@@ -32,8 +32,6 @@ struct input_sample
 
 } g_inputDesktop;
 
-AppInput g_appInput;
-
 void onKeyboardPressedBasic(GLFWwindow* window, int key, int, int action, int)
 {
   switch (key)
@@ -54,9 +52,9 @@ void onKeyboardPressedBasic(GLFWwindow* window, int key, int, int action, int)
       if(key >= 0 && key < AppInput::MAXKEYS)
       {
         if (action == GLFW_RELEASE)
-          g_appInput.keyReleased[key] = true;
+          SimpleShadowmapRender::g_appInput.keyReleased[key] = true;
         else if(action == GLFW_PRESS)
-          g_appInput.keyPressed[key] = true;
+          SimpleShadowmapRender::g_appInput.keyPressed[key] = true;
       }
       break;
   }
@@ -190,7 +188,7 @@ void mainLoop(std::shared_ptr<IRender> &app, GLFWwindow* window, bool displayGUI
   int avgCounter = 0;
   int currCam    = 0;
 
-  g_appInput.cams[0] = app->GetCurrentCamera();
+  SimpleShadowmapRender::g_appInput.cams[0] = app->GetCurrentCamera();
   double lastTime = glfwGetTime();
   while (!glfwWindowShouldClose(window))
   {
@@ -198,16 +196,16 @@ void mainLoop(std::shared_ptr<IRender> &app, GLFWwindow* window, bool displayGUI
     double diffTime = thisTime - lastTime;
     lastTime        = thisTime;
     
-    g_appInput.clearKeys();
+    SimpleShadowmapRender::g_appInput.clearKeys();
     glfwPollEvents();
     
-    if(g_appInput.keyReleased[GLFW_KEY_L])
+    if(SimpleShadowmapRender::g_appInput.keyReleased[GLFW_KEY_L])
       currCam = 1 - currCam;
 
-    UpdateCamera(window, g_appInput.cams[currCam], static_cast<float>(diffTime));
+    UpdateCamera(window, SimpleShadowmapRender::g_appInput.cams[currCam], static_cast<float>(diffTime));
     
-    app->ProcessInput(g_appInput);
-    app->UpdateCamera(g_appInput.cams, 2);
+    app->ProcessInput(SimpleShadowmapRender::g_appInput);
+    app->UpdateCamera(SimpleShadowmapRender::g_appInput.cams, 2);
     if(displayGUI)
       app->DrawFrame(static_cast<float>(thisTime), DrawMode::WITH_GUI);
     else

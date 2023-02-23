@@ -12,6 +12,7 @@
 
 
 /// RESOURCE ALLOCATION
+AppInput SimpleShadowmapRender::g_appInput;
 
 void SimpleShadowmapRender::AllocateResources()
 {
