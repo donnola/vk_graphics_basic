@@ -26,6 +26,8 @@ struct SceneManager
   ~SceneManager() { DestroyScene(); }
 
   bool LoadSceneXML(const std::string &scenePath, bool transpose = true);
+  bool LoadSceneQuadMesh(const std::string &scenePath, bool transpose, int resolution);
+  void GenerateQuadMesh(int resolution);
   void LoadSingleTriangle();
 
   uint32_t AddMeshFromFile(const std::string& meshPath);
@@ -57,7 +59,6 @@ struct SceneManager
   LiteMath::Box4f GetInstanceBbox(uint32_t instId) const {assert(instId < m_instanceBboxes.size()); return m_instanceBboxes[instId];}
   LiteMath::float4x4 GetInstanceMatrix(uint32_t instId) const {assert(instId < m_instanceMatrices.size()); return m_instanceMatrices[instId];}
   LiteMath::Box4f GetSceneBbox() const {return sceneBbox;}
-
 private:
   void LoadGeoDataOnGPU();
 
