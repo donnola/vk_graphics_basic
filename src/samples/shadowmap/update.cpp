@@ -23,7 +23,6 @@ void SimpleShadowmapRender::UpdateView()
   m_uniforms.view = mLookAt;
   m_uniforms.proj = mProjFix * mProj;
   m_uniforms.viewInverse = LiteMath::inverse4x4(mLookAt);
-  
   m_worldViewProj = mWorldViewProj;
   
   ///// calc light matrix
@@ -47,9 +46,6 @@ void SimpleShadowmapRender::UpdateUniformBuffer(float a_time)
   m_uniforms.lightMatrix = m_lightMatrix;
   m_uniforms.lightPos    = m_light.cam.pos; //LiteMath::float3(sinf(a_time), 1.0f, cosf(a_time));
   m_uniforms.time        = a_time;
-  
-  m_uniforms.ssaoKernelSize = 64;
-  m_uniforms.ssaoNoiseSize  = 16;
 
   memcpy(m_uboMappedMem, &m_uniforms, sizeof(m_uniforms));
 }
@@ -69,9 +65,9 @@ void SimpleShadowmapRender::ProcessInput(const AppInput &input)
   if(input.keyPressed[GLFW_KEY_B])
   {
 #ifdef WIN32
-    std::system("cd ../resources/shaders && python compile_shadowmap_shaders.py");
+    std::system("cd resources/shaders && python compile_shadowmap_shaders.py");
 #else
-    std::system("cd ../resources/shaders && python3 compile_shadowmap_shaders.py");
+    std::system("cd resources/shaders && python3 compile_shadowmap_shaders.py");
 #endif
 
     etna::reload_shaders();
