@@ -8,7 +8,8 @@ SimpleShadowmapRender::SimpleShadowmapRender(uint32_t a_width, uint32_t a_height
   m_uniforms.baseColor = LiteMath::float3(0.9f, 0.92f, 1.0f);
   m_uniforms.useSSAO = false;
   m_uniforms.ssaoKernelSize = 64;
-  m_uniforms.ssaoNoiseSize = 8;
+  m_uniforms.ssaoNoiseSize = 4;
+  m_uniforms.ssaoRadius = 0.25f;
 }
 
 void SimpleShadowmapRender::InitVulkan(const char** a_instanceExtensions, uint32_t a_instanceExtensionsCount, uint32_t)

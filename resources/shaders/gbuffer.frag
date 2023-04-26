@@ -45,11 +45,11 @@ void main()
   }
   else
   {
-    float k = 0.f;
+    float ao = 1.f;
     if (Params.useSSAO)
-      k = texture(ssaoMap, vsOut.texCoord).r;
+      ao = texture(ssaoMap, vsOut.texCoord).r;
     vec3 lightDir = normalize(Params.lightPos - wPos);
     vec4 lightColor = max(dot(normal, lightDir), 0.0f) * lightColor1;
-    out_fragColor = (lightColor * shadow + vec4(0.4f) * k) * albedo;
+    out_fragColor = (lightColor * shadow + vec4(0.4f) * ao * albedo);
   }
 }

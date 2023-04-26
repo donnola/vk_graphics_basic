@@ -375,45 +375,47 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   if (m_uniforms.useSSAO)
   {
     auto simpleBlurInfo = etna::get_shader_program("simple_blur");
-      auto set = etna::create_descriptor_set(simpleBlurInfo.getDescriptorLayoutId(0), a_cmdBuff,
-      {
-        etna::Binding {0, SSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
-        etna::Binding {1, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
-        etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
-      });
-      VkDescriptorSet vkSet = set.getVkSet();
-      etna::flush_barriers(a_cmdBuff);
+    auto set = etna::create_descriptor_set(simpleBlurInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    {
+      etna::Binding {0, SSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+      etna::Binding {1, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+      etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+    });
+    VkDescriptorSet vkSet = set.getVkSet();
+    etna::flush_barriers(a_cmdBuff);
 
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE,
-        m_blurSSAO_Pipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
-      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE, m_blurSSAO_Pipeline.getVkPipeline());
-      vkCmdDispatch(a_cmdBuff, m_width / 32 + 1, m_height / 32 + 1, 1);
+    VkShaderStageFlags stageFlags = (VK_SHADER_STAGE_COMPUTE_BIT);
+
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE,
+      m_blurSSAO_Pipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE, m_blurSSAO_Pipeline.getVkPipeline());
+    vkCmdDispatch(a_cmdBuff, m_width / 32 + 1, m_height / 32 + 1, 1);
   }
 
   {
 
-      auto simpleFinalDeferredInfo = etna::get_shader_program("simple_gbuffer");
+    auto simpleFinalDeferredInfo = etna::get_shader_program("simple_gbuffer");
 
-      etna::DescriptorSet set = etna::create_descriptor_set(simpleFinalDeferredInfo.getDescriptorLayoutId(0), a_cmdBuff,
-      {
-        etna::Binding {0, constants.genBinding()},
-        etna::Binding {1, shadowMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-        etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-        etna::Binding {3, normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-        etna::Binding {4, albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-        etna::Binding {5, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-      });
+    etna::DescriptorSet set = etna::create_descriptor_set(simpleFinalDeferredInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    {
+      etna::Binding {0, constants.genBinding()},
+      etna::Binding {1, shadowMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {3, normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {4, albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {5, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+    });
 
-      VkDescriptorSet vkSet = set.getVkSet();
+    VkDescriptorSet vkSet = set.getVkSet();
 
-      etna::RenderTargetState renderTargets(a_cmdBuff, { m_width, m_height }, { { a_targetImage, a_targetImageView } }, {});
+    etna::RenderTargetState renderTargets(a_cmdBuff, { m_width, m_height }, { { a_targetImage, a_targetImageView } }, {});
 
-      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gbufferPipeline.getVkPipeline());
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        m_gbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gbufferPipeline.getVkPipeline());
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      m_gbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
       vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
-    }
+  }
 
   if(m_input.drawFSQuad)
   {

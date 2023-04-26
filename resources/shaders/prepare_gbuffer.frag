@@ -33,17 +33,17 @@ void main()
   normal = (Params.view * vec4(vsOut.wNorm, 0.0)).xyz;
   switch(PushConstant.albedoId)
   {
-    case 0:
-      albedo = vec3(0.124f, 0.3214f, 0.124f); break;            
-    case 1:
-      albedo = vec3(0.4234f, 0.123f, 0.524f); break;            
-    case 2:
-      albedo = vec3(0.654f, 0.6233f, 0.4523f); break;            
-    case 3: 
-      albedo = vec3(0.5321f, 0.6433f, 0.953f); break;            
-    case 4:
-      albedo = vec3(0.642f, 0.635f, 0.344f); break;            
-    case 5:
-      albedo = vec3(0.4332f, 0.534f, 0.756f); break;       
+    case 0: // Room walls
+      albedo = vec3(0.733f, 1.f, 0.596f); break;            
+    case 1: // Teapot
+      albedo = vec3(1.f, 0.596f, 0.651f); break;            
+    case 2: // Box
+      albedo = vec3(1.f, 0.424f, 0.424f); break;            
+    case 3: // Cylinder
+      albedo = vec3(0.596f, 0.957f, 1.f); break;            
+    case 4: // L-shaped figure
+      albedo = vec3(0.749f, 0.725f, 1.f); break;            
+    case 5: // Sphere
+      albedo = vec3(1.f, 0.788f, 0.424f); break;       
   }
 }
