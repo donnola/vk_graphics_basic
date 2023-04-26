@@ -50,6 +50,14 @@ private:
   etna::Sampler defaultSampler;
   etna::Buffer constants;
 
+  etna::Image position;
+  etna::Image normal;
+  etna::Image albedo;
+  etna::Image SSAO;
+  etna::Image blurSSAO;
+  etna::Buffer ssaoSamples;
+  etna::Buffer ssaoNoise;
+
   VkCommandPool    m_commandPool    = VK_NULL_HANDLE;
 
   struct
@@ -67,6 +75,7 @@ private:
   {
     float4x4 projView;
     float4x4 model;
+    uint albedoId;
   } pushConst2M;
 
   float4x4 m_worldViewProj;
@@ -77,6 +86,11 @@ private:
 
   etna::GraphicsPipeline m_basicForwardPipeline {};
   etna::GraphicsPipeline m_shadowPipeline {};
+
+  etna::GraphicsPipeline m_prepareGbufferPipeline {};
+  etna::GraphicsPipeline m_gbufferPipeline {};
+  etna::GraphicsPipeline m_SSAO_Pipeline {};
+  etna::ComputePipeline m_blurSSAO_Pipeline {};
 
   std::shared_ptr<vk_utils::DescriptorMaker> m_pBindings = nullptr;
   

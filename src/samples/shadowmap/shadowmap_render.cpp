@@ -10,6 +10,15 @@
 #include <etna/RenderTargetStates.hpp>
 #include <vulkan/vulkan_core.h>
 
+#include <random>
+
+static float randf()
+{
+  static std::random_device dev;
+  static std::mt19937 generator( dev() );
+  std::uniform_real_distribution<float> uniform(0.f, 1.f);
+  return uniform(generator);
+}
 
 /// RESOURCE ALLOCATION
 
@@ -31,6 +40,46 @@ void SimpleShadowmapRender::AllocateResources()
     .imageUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled
   });
 
+  position = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "position",
+    .format = vk::Format::eR32G32B32A32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage
+  });
+
+  normal = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "normal",
+    .format = vk::Format::eR32G32B32A32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+  });
+
+  albedo = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "albedo",
+    .format = vk::Format::eR8G8B8A8Srgb,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+  });
+
+  SSAO = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "ssao",
+    .format = vk::Format::eR32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage
+  });
+
+  blurSSAO = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "blur_ssao",
+    .format = vk::Format::eR32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage
+  });
+
   defaultSampler = etna::Sampler(etna::Sampler::CreateInfo{.name = "default_sampler"});
   constants = m_context->createBuffer(etna::Buffer::CreateInfo
   {
@@ -40,7 +89,40 @@ void SimpleShadowmapRender::AllocateResources()
     .name = "constants"
   });
 
+  ssaoSamples = m_context->createBuffer(etna::Buffer::CreateInfo
+  {
+    .size        = sizeof(float4) * m_uniforms.ssaoKernelSize,
+    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+    .name = "ssao_samples"
+  });
+
+  ssaoNoise = m_context->createBuffer(etna::Buffer::CreateInfo
+  {
+    .size        = sizeof(float4) * m_uniforms.ssaoNoiseSize * m_uniforms.ssaoNoiseSize,
+    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+    .name = "ssao_noise"
+  });
+
   m_uboMappedMem = constants.map();
+
+  void *ssaoSamplesMappedMem = ssaoSamples.map();
+  std::vector<float4> ssaoSamplesVec;
+  ssaoSamplesVec.reserve(m_uniforms.ssaoKernelSize);
+  for (uint32_t i = 0; i < m_uniforms.ssaoKernelSize; ++i)
+  {
+    float4 sample = {randf() * 2.f - 1.f, randf() * 2.f - 1.f, randf(), 0.0};
+    ssaoSamplesVec.push_back(LiteMath::normalize(sample) * randf());
+  }
+  memcpy(ssaoSamplesMappedMem, ssaoSamplesVec.data(), ssaoSamplesVec.size() * sizeof(float4));
+  ssaoSamples.unmap();
+
+  void *ssaoNoiseMappedMem = ssaoNoise.map();
+  std::vector<float4> ssaoNoiseVec(m_uniforms.ssaoNoiseSize*m_uniforms.ssaoNoiseSize,
+                                   {randf() * 2.f - 1.f, randf() * 2.f - 1.f, 0.f, 0.0f});
+  memcpy(ssaoNoiseMappedMem, ssaoNoiseVec.data(), m_uniforms.ssaoNoiseSize*m_uniforms.ssaoNoiseSize*sizeof(float4));
+  ssaoNoise.unmap();
 }
 
 void SimpleShadowmapRender::LoadScene(const char* path, bool transpose_inst_matrices)
@@ -63,10 +145,17 @@ void SimpleShadowmapRender::DeallocateResources()
 {
   mainViewDepth.reset(); // TODO: Make an etna method to reset all the resources
   shadowMap.reset();
+  position.reset();
+  normal.reset();
+  albedo.reset();
+  SSAO.reset();
+  blurSSAO.reset();
   m_swapchain.Cleanup();
   vkDestroySurfaceKHR(GetVkInstance(), m_surface, nullptr);  
 
   constants = etna::Buffer();
+  ssaoSamples = etna::Buffer();
+  ssaoNoise = etna::Buffer();
 }
 
 
@@ -99,6 +188,14 @@ void SimpleShadowmapRender::loadShaders()
   etna::create_program("simple_material",
     {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple_shadow.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
   etna::create_program("simple_shadow", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
+  etna::create_program("prepare_gbuffer",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/prepare_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
+  etna::create_program("simple_gbuffer",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/quad3_vert.vert.spv"});
+  etna::create_program("simple_ssao",
+    { VK_GRAPHICS_BASIC_ROOT"/resources/shaders/ssao.frag.spv", VK_GRAPHICS_BASIC_ROOT "/resources/shaders/quad3_vert.vert.spv" });
+  etna::create_program("simple_blur",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/blur.comp.spv"});
 }
 
 void SimpleShadowmapRender::SetupSimplePipeline()
@@ -107,6 +204,15 @@ void SimpleShadowmapRender::SetupSimplePipeline()
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             1},
       {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,     2}
   };
+
+  auto blendAttachment = vk::PipelineColorBlendAttachmentState
+    {
+      .blendEnable = false,
+      .colorWriteMask = vk::ColorComponentFlagBits::eR
+        | vk::ColorComponentFlagBits::eG
+        | vk::ColorComponentFlagBits::eB
+        | vk::ColorComponentFlagBits::eA
+    };
 
   m_pBindings = std::make_shared<vk_utils::DescriptorMaker>(m_context->getDevice(), dtypes, 2);
   
@@ -140,6 +246,35 @@ void SimpleShadowmapRender::SetupSimplePipeline()
           .depthAttachmentFormat = vk::Format::eD16Unorm
         }
     });
+
+  m_prepareGbufferPipeline = pipelineManager.createGraphicsPipeline("prepare_gbuffer",
+    {
+      .vertexShaderInput = sceneVertexInputDesc,
+      .blendingConfig =
+        {
+          .attachments = {blendAttachment, blendAttachment, blendAttachment}
+        },
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = {vk::Format::eR32G32B32A32Sfloat, vk::Format::eR32G32B32A32Sfloat, vk::Format::eR8G8B8A8Srgb},
+          .depthAttachmentFormat = vk::Format::eD32Sfloat
+        }
+    });
+  m_gbufferPipeline = pipelineManager.createGraphicsPipeline("simple_gbuffer",
+    {
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = { static_cast<vk::Format>(m_swapchain.GetFormat()) },
+        }
+    });
+  m_SSAO_Pipeline = pipelineManager.createGraphicsPipeline("simple_ssao",
+    {
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = {vk::Format::eR32Sfloat},
+        }
+    });
+  m_blurSSAO_Pipeline = pipelineManager.createComputePipeline("simple_blur", {});
 }
 
 void SimpleShadowmapRender::DestroyPipelines()
@@ -167,6 +302,7 @@ void SimpleShadowmapRender::DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4
   {
     auto inst         = m_pScnMgr->GetInstanceInfo(i);
     pushConst2M.model = m_pScnMgr->GetInstanceMatrix(i);
+    pushConst2M.albedoId = i;
     vkCmdPushConstants(a_cmdBuff, m_basicForwardPipeline.getVkPipelineLayout(),
       stageFlags, 0, sizeof(pushConst2M), &pushConst2M);
 
@@ -197,24 +333,87 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   //// draw final scene to screen
   //
   {
-    auto simpleMaterialInfo = etna::get_shader_program("simple_material");
-
-    auto set = etna::create_descriptor_set(simpleMaterialInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    auto prepareGbufferInfo = etna::get_shader_program("prepare_gbuffer");
+    auto set = etna::create_descriptor_set(prepareGbufferInfo.getDescriptorLayoutId(0), a_cmdBuff,
     {
-      etna::Binding {0, constants.genBinding()},
-      etna::Binding {1, shadowMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)}
+      etna::Binding {0, constants.genBinding()}
     });
 
     VkDescriptorSet vkSet = set.getVkSet();
 
-    etna::RenderTargetState renderTargets(a_cmdBuff, {m_width, m_height}, {{a_targetImage, a_targetImageView}}, mainViewDepth);
+    etna::RenderTargetState renderTargets(a_cmdBuff, {m_width, m_height}, {{position}, {normal}, {albedo}}, mainViewDepth);
 
-    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicForwardPipeline.getVkPipeline());
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepareGbufferPipeline.getVkPipeline());
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
-      m_basicForwardPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+      m_prepareGbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
     DrawSceneCmd(a_cmdBuff, m_worldViewProj);
   }
+
+  {
+    auto ssaoInfo = etna::get_shader_program("simple_ssao");
+    auto set = etna::create_descriptor_set(ssaoInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    {
+      etna::Binding {0, constants.genBinding()},
+      etna::Binding {1, position.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {2, normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {3, ssaoSamples.genBinding()},
+      etna::Binding {4, ssaoNoise.genBinding()}
+    });
+
+    VkDescriptorSet vkSet = set.getVkSet();
+
+    etna::RenderTargetState renderTargets(a_cmdBuff, {m_width, m_height}, {{SSAO}}, {});
+
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_SSAO_Pipeline.getVkPipeline());
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      m_SSAO_Pipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+
+    vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
+  }
+
+  if (m_uniforms.useSSAO)
+  {
+    auto simpleBlurInfo = etna::get_shader_program("simple_blur");
+      auto set = etna::create_descriptor_set(simpleBlurInfo.getDescriptorLayoutId(0), a_cmdBuff,
+      {
+        etna::Binding {0, SSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+        etna::Binding {1, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+        etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+      });
+      VkDescriptorSet vkSet = set.getVkSet();
+      etna::flush_barriers(a_cmdBuff);
+
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE,
+        m_blurSSAO_Pipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE, m_blurSSAO_Pipeline.getVkPipeline());
+      vkCmdDispatch(a_cmdBuff, m_width / 32 + 1, m_height / 32 + 1, 1);
+  }
+
+  {
+
+      auto simpleFinalDeferredInfo = etna::get_shader_program("simple_gbuffer");
+
+      etna::DescriptorSet set = etna::create_descriptor_set(simpleFinalDeferredInfo.getDescriptorLayoutId(0), a_cmdBuff,
+      {
+        etna::Binding {0, constants.genBinding()},
+        etna::Binding {1, shadowMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding {2, position.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding {3, normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding {4, albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding {5, blurSSAO.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      });
+
+      VkDescriptorSet vkSet = set.getVkSet();
+
+      etna::RenderTargetState renderTargets(a_cmdBuff, { m_width, m_height }, { { a_targetImage, a_targetImageView } }, {});
+
+      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gbufferPipeline.getVkPipeline());
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        m_gbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+
+      vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
+    }
 
   if(m_input.drawFSQuad)
   {
