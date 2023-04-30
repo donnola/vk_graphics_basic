@@ -49,6 +49,7 @@ private:
   etna::Image shadowMap;
   etna::Sampler defaultSampler;
   etna::Buffer constants;
+  etna::Image hdrImage;
 
   VkCommandPool    m_commandPool    = VK_NULL_HANDLE;
 
@@ -77,6 +78,7 @@ private:
 
   etna::GraphicsPipeline m_basicForwardPipeline {};
   etna::GraphicsPipeline m_shadowPipeline {};
+  etna::GraphicsPipeline m_toneMappingPipeline{};
 
   std::shared_ptr<vk_utils::DescriptorMaker> m_pBindings = nullptr;
   
